@@ -52,7 +52,7 @@ esp32:
 external_components:
   - source:
       type: git
-      url: [https://github.com/Kuj0n/esphome-components](https://github.com/Kuj0n/esphome-components)
+      url: https://github.com/Kuj0n/esphome-components
       ref: main
     components: [ wmbus_common, wmbus_radio, wmbus_meter ]
     refresh: 1d
