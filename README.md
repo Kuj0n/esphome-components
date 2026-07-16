@@ -1,26 +1,21 @@
-# esphome-components (wM-Bus v5)
+# esphome-components (wM-Bus / SX1262)
 
-> **Informacja o projekcie:** Niniejszy fork bazuje bezpośrednio na **wersji v5 od SzczepanLeon** (opartej na pierwotnym kodzie od IoTLabs-pl / Kuby).  
-> Komponent zapewnia obsługę odbioru telegramów wM-Bus (m.in. z liczników wody, gazu, prądu czy ciepłomierzy) w środowisku ESPHome z wykorzystaniem wydajnego frameworka **ESP-IDF**.
+Komponent do bezprzewodowego odczytu liczników wM-Bus (wodomierze, gazomierze, ciepłomierze itp.) w środowisku ESPHome z wykorzystaniem wydajnego frameworka **ESP-IDF** oraz układów radiowych **SX1262**.
 
-> **_NOTE:_** Starsze wersje komponentu (z obsługą wyłącznie CC1101 w środowisku Arduino) znajdziesz w oryginalnym repozytorium:  
-> [version 4](https://github.com/SzczepanLeon/esphome-components/tree/version_4) | [version 3](https://github.com/SzczepanLeon/esphome-components/tree/version_3) | [version 2](https://github.com/SzczepanLeon/esphome-components/tree/version_2)
+*Fork bazuje na kodzie wM-Bus v5 (SzczepanLeon / IoTLabs-pl).*
 
 ---
 
-## ⚠️ Kluczowa uwaga dla ESPHome 2026.7.0+ i ESP-IDF
+## ⚠️ Wymaganie dla ESPHome 2026.7.0+
 
-Od wersji **ESPHome 2026.7.0** domyślnym narzędziem budującym (toolchainem) dla frameworka `esp-idf` stał się natywny CMake (`toolchain: esp-idf`). Wywołuje to dwa krytyczne problemy przy kompilacji tego komponentu na nowym silniku:
-1. **Błąd linkera (`undefined reference`):** Natywny skrypt CMake ignoruje pliki źródłowe z rozszerzeniem `.cc` (których używa silnik `wmbusmeters`), przez co funkcje dekodujące nie są w ogóle kompilowane.
-2. **Konflikt nazw (`STATUS`):** Nowe nagłówki systemowe ESP-IDF 5.5.4 dla pamięci ROM (zwłaszcza na układach ESP32-S3) rezerwują globalne słowo `STATUS`, co koliduje z wyliczeniem w pliku `meters.h` (`error: 'STATUS' redeclared as different kind of entity`).
-
-**Rozwiązanie:** Aby komponent kompilował się bezproblemowo na najnowszych wersjach ESPHome z zachowaniem pełnej wydajności ESP-IDF, należy w sekcji `esp32:` **obowiązkowo dopisać parametr `toolchain: platformio`**, który przywraca poprawną obsługę plików `.cc` i eliminuje kolizję nagłówków:
+Od wersji **ESPHome 2026.7.0** przy korzystaniu z frameworka `esp-idf` należy w sekcji `esp32:` obowiązkowo dodać parametr **`toolchain: platformio`**. 
+Jest to wymagane, aby kompilator prawidłowo połączył wszystkie pliki źródłowe biblioteki `wmbusmeters` podczas budowania firmware'u:
 
 ```yaml
 esp32:
   board: esp32-s3-devkitc-1
   variant: esp32s3
-  toolchain: platformio   # <--- KLUCZOWY PARAMETR DLA ESPHOME 2026.7.0+
+  toolchain: platformio   # <--- Wymagane od ESPHome 2026.7.0 dla esp-idf
   framework:
     type: esp-idf
 ```
@@ -29,7 +24,7 @@ esp32:
 
 ## 🚀 Przykładowa konfiguracja (ESP32-S3 + SX1262 + Octal PSRAM)
 
-Poniżej znajduje się kompletny, w pełni przetestowany przykład konfiguracji dla płytki **ESP32-S3 (N16R8)** z zewnętrzną anteną na przełączniku **LR30**, obsługującej radio **SX1262** po magistrali SPI oraz odczytującej dane z wodomierzy **Apator 162**:
+Kompletna konfiguracja dla płytki **ESP32-S3 (N16R8)** z zewnętrzną anteną na przełączniku **LR30**, obsługującej radio **SX1262** po magistrali SPI oraz odczytującej dane z wodomierzy **Apator 162**:
 
 ```yaml
 substitutions:
@@ -45,7 +40,7 @@ esp32:
   board: esp32-s3-devkitc-1
   variant: esp32s3
   flash_size: 16MB
-  toolchain: platformio   # Wymagane od ESPHome 2026.7.0 dla frameworka esp-idf!
+  toolchain: platformio
   framework:
     type: esp-idf
     sdkconfig_options:
@@ -239,87 +234,17 @@ binary_sensor:
 
 ---
 
-## 📡 Obsługiwane moduły radiowe i ich parametry
+## 📡 Parametry modułu radiowego SX1262
 
-### CC1101
-Dla klasycznego modułu CC1101 możesz skonfigurować częstotliwość pracy (zazwyczaj 868.95 MHz dla wM-Bus w Europie):
+Wszystkie linie magistrali SPI (`clk_pin`, `miso_pin`, `mosi_pin`) konfiguruje się w standardowym bloku `spi:`. W bloku `wmbus_radio:` podaje się piny sterujące samym modułem radiowym:
 
-```yaml
-wmbus_radio:
-  radio_type: CC1101
-  frequency: 868.95MHz       # Opcjonalne: zakres 300–928 MHz (domyślnie 868.95 MHz)
-  mosi_pin: GPIO11           # Linia SPI
-  miso_pin: GPIO13           # Linia SPI
-  clk_pin: GPIO12            # Linia SPI
-  cs_pin: GPIO10             # Chip Select (CS / SS)
-  irq_pin: GPIO5             # Linia przerwania (GDO0 / GD0)
-```
-
-| Parametr | Wymagany | Domyślnie | Opis |
-| :--- | :---: | :---: | :--- |
-| `radio_type` | tak | — | Typ radia: `CC1101` |
-| `cs_pin` | tak | — | Pin SPI Chip Select |
-| `irq_pin` | tak | — | Pin przerwania (połączony z pinem GDO0 na module) |
-| `frequency` | nie | `868.95MHz` | Częstotliwość pracy z zakresu 300–928 MHz |
-
-*Przetestowano m.in. na płytkach ESP32-C3 Super Mini + CC1101 v2.0 (E07-M1101D-SMA - niebieska płytka).*
-
----
-
-### SX1276
-Dla układów SX1276 (np. moduły LoRa/RFM95) konfigurujesz magistralę SPI standardowo w bloku `spi:`, a w bloku radia wskazujesz dodatkowo pin resetu oraz przerwania (jako DIO1). Przerwania wyzwalane są przy niepustym buforze FIFO:
-
-```yaml
-wmbus_radio:
-  radio_type: SX1276
-  cs_pin: GPIO18
-  reset_pin: GPIO14
-  irq_pin: GPIO26            # Podłączone do DIO1 na module
-```
-
----
-
-### SX1262
-Dla nowoczesnych układów SX1262 konfiguracja jest zbliżona do SX1276, ale udostępnia dodatkowe zaawansowane parametry kontrolne:
-
-```yaml
-wmbus_radio:
-  radio_type: SX1262
-  cs_pin: GPIO23
-  reset_pin: GPIO4
-  irq_pin: GPIO7             # Podłączone do DIO1
-  busy_pin: GPIO19           # Opcjonalne, ale bardzo zalecane do prawidłowego timingu
-  rx_gain: BOOSTED           # BOOSTED (domyślnie, wyższa czułość) lub POWER_SAVING
-  rf_switch: false           # Ustaw na true, jeśli DIO2 bezpośrednio steruje przełącznikiem RF
-  has_tcxo: true             # Ustaw na true, jeśli DIO3 zasila zewnętrzny oscylator TCXO
-```
-
-**Specyficzne parametry dla SX1262:**
-- `busy_pin`: Opcjonalny pin GPIO dla sygnału BUSY z układu SX1262. Wysoce zalecany dla zachowania stabilności transmisji.
-- `rx_gain`: Tryb wzmocnienia odbiornika: `BOOSTED` (lepsza czułość, domyślny) lub `POWER_SAVING` (mniejszy pobór prądu).
-- `rf_switch`: Ustaw na `true`, jeśli linia DIO2 układu SX1262 jest fizycznie połączona ze sterowaniem przełącznika antenowego TX/RX na płytce modułu.
-- `has_tcxo`: Ustaw na `true`, jeśli moduł posiada oscylator TCXO zasilany z pinu DIO3 (np. większość modułów Waveshare/Ebyte).
-
----
-
-## 📋 Lista zadań (TODO / DONE)
-
-### TODO:
-- [ ] Przygotowanie gotowych pakietów (packages) dla popularnych płytek (np. UltimateReader) z wyświetlaczami, diodami LED itp.
-- [ ] Agresywne czyszczenie klas i struktur biblioteki wmbusmeters w celu oszczędności pamięci.
-- [ ] Refaktoryzacja logów i śledzenia transmisji (traces).
-
-### DONE:
-- [x] Dodanie konfiguracji częstotliwości dla CC1101 (300–928 MHz, domyślnie 868.95 MHz).
-- [x] Pełna obsługa CC1101 wraz z obsługą przepełnienia bufora FIFO i obejściem błędów sprzętowych (errata workaround).
-- [x] Dodanie obsługi radia SX1262 (z ograniczoną długością ramki) oraz SX1276.
-- [x] Reużycie mechanizmów CRC i parserów ramek bezpośrednio z wmbusmeters.
-- [x] Refaktoryzacja dekodera 3out6.
-- [x] Migracja do środowiska `esp-idf` i całkowite porzucenie frameworka Arduino!
-- [x] Uruchomienie odbiornika radiowego w dedykowanym, osobnym tasku FreeRTOS.
-- [x] Usunięcie zbędnych komponentów niepowiązanych z wM-Bus z części radiowej.
-- [x] Możliwość podawania klucza szyfrowania w formacie ASCII.
-- [x] Podział architektoniczny kodu na osobne komponenty (`wmbus_radio` dla komunikacji radiowej, `wmbus_meter` dla liczników oraz `wmbus_common` dla rdzenia wmbusmeters).
-- [x] Dodanie wyzwalaczy (triggers):
-  - Radio -> `on_packet` (pozwala np. mignąć diodą przy odbiorze dowolnej ramki lub telegramu).
-  - Meter -> `on_telegram` (pozwala wywołać akcję po odbiorze prawidłowego odczytu ze zdefiniowanego licznika).
+| Parametr | Wymagany | Opis |
+| :--- | :---: | :--- |
+| `radio_type` | **tak** | Typ radia – zawsze ustawione na `SX1262`. |
+| `cs_pin` | **tak** | Pin SPI Chip Select (CS / NSS). |
+| `irq_pin` | **tak** | Pin przerwania (połączony z pinem DIO1 na module). |
+| `reset_pin` | **tak** | Pin sprzętowego resetu modułu (RST / NRST). |
+| `busy_pin` | nie | Pin sygnału BUSY. Bardzo zalecany dla stabilności komunikacji. |
+| `rx_gain` | nie | Tryb czułości odbiornika: `BOOSTED` (domyślny, maksymalny zasięg) lub `POWER_SAVING`. |
+| `rf_switch` | nie | Ustaw na `true`, jeśli linia DIO2 bezpośrednio steruje przełącznikiem antenowym na płytce. |
+| `has_tcxo` | nie | Ustaw na `true`, jeśli moduł posiada oscylator TCXO zasilany z pinu DIO3. |
